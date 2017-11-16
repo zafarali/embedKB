@@ -1,0 +1,6 @@
+TransE	type_of	embedding
+StructuedEmbedding	type_of	embedding
+NeuralNetwork	type_of	machine_learning
+Games	played_by	children
+school_kid	type_of	children
+GTA	played_by	adults
