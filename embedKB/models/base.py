@@ -89,6 +89,8 @@ class GeneralFramework(Model, TrainWrapper):
         :param embedded_tail: the vector representation of the tail entity
         :return: the bilinear_product embedded_head.T * relationship_matrix * embedded_tail
         """
+        embedded_head = self.entity_shape_correct(embedded_head, 'e_head')
+        embedded_tail = self.entity_shape_correct(embedded_tail, 'e_tail')
         return bilinear_product(embedded_head, relationship_matrix, embedded_tail)
 
     def _scoring_function(self, embedded_head, relationship, embedded_tail):
