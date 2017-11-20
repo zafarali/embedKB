@@ -1,8 +1,11 @@
 from .task import Task
 import numpy as np
+import logging
 from embedKB.datatools import Dataset
 import multiprocessing
 import itertools
+
+MAX_ITERATES = 5000
 
 class TripleClassificationTask(Task):
     def __init__(self, dataset, workers=1):
@@ -34,6 +37,7 @@ class TripleClassificationTask(Task):
             possible_heads[r] = data[np.where(data[:, 1] == r), 0][0].tolist()
             possible_tails[r] = data[np.where(data[:, 1] == r), 2][0].tolist()
 
+        self.unique_entities = list(set(itertools.chain.from_iterable(possible_tails.values())))
         self.possible_heads = possible_heads
         self.possible_tails = possible_tails
         self.unique_relations = unique_relations
@@ -60,15 +64,32 @@ class TripleClassificationTask(Task):
 
         self.threshold_values = threshold_values
 
+    def pick_new_entity(self, current_entity, choose_from, max_iterates=MAX_ITERATES):
+        """
+        Picks a new entity from a list of entities in choose_from.
+        :param current_entity: the current value of the entity
+        :param choose_from: the list of entities we can choose from
+        :result: the int representing the new entity to replace with.
+        """
+        new_entity = current_entity
+        iterates = 0
+        while new_entity == current_entity:
+            new_entity = np.random.choice(choose_from)
+            iterates += 1
+            if iterates > max_iterates:
+                logging.warn('Too many iterates picked the same entity. Picking random entity.')
+                new_entity = np.random.choice(self.unique_entities)
+        return new_entity
+
     def _corrupt(self, triple):
         # decice which entity to replace:
         entity_to_replace = np.random.choice([0, 2])
         to_return = None
         if entity_to_replace == 0:
-            new_entity = np.random.choice(self.possible_heads[triple[1]])
+            new_entity = self.pick_new_entity(triple[0], self.possible_heads[triple[1]])
             to_return = (new_entity, triple[1], triple[2])
         elif entity_to_replace == 2:
-            new_entity = np.random.choice(self.possible_heads[triple[1]])
+            new_entity = self.pick_new_entity(triple[0], self.possible_tails[triple[1]])
             to_return = (triple[0], triple[1], new_entity)
         else:
             raise ValueError('Unknown entity to replace.')
