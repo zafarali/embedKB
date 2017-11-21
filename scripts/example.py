@@ -66,7 +66,7 @@ framework = StructuredEmbedding(kb.n_entities,
 framework.create_objective(regularize=[framework.W_relationship_embedding_head,
 									   framework.W_relationship_embedding_tail,
 									   framework.W_entity_embedding],
-						   regularize_weight=0.01)
+						   regularization_weight=0.01)
 
 # by default it uses SGD
 framework.create_optimizer(optimizer=tf.train.AdamOptimizer)
