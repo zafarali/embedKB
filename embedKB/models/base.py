@@ -1,7 +1,8 @@
 import tensorflow as tf
 from embedKB.utils.tensorutils import (
                 bilinear_product, 
-                create_placeholder)
+                create_placeholder,
+                int_shapes)
 from embedKB.training.trainer import TrainWrapper
 import numpy as np
 import os
@@ -22,9 +23,22 @@ class Model(object):
                 [-1, self.entity_embed_dim, 1], name=name)
     
     def relationship_shape_correct(self, relationship_embeddings, name=None):
-        # TODO: make this automatic.
-        raise NotImplementedError('You must implement the relationship shape correction')
-    
+
+        dims = int_shapes(relationship_embeddings)
+        if len(dims) == 3: 
+            return tf.reshape(relationship_embeddings, [-1, 1, self.relationship_embed_dim], name=name)
+        elif len(dims) == 4:
+            # vectors/matrices
+            if dims[2] == 1:
+                return tf.reshape(relationship_embeddings, [-1, 1, self.relationship_embed_dim], name=name)
+            else:
+                return tf.reshape(relationship_embeddings, [-1, self.relationship_embed_dim, self.entity_embed_dim], name=name)
+        elif len(dims) == 5:
+            # tensors
+            return tf.reshape(relationship_embeddings, [-1, self.entity_embed_dim, self.entity_embed_dim, self.relationship_embed_dim])
+        else:
+            raise ValueError('The relationship embeddings are vectors, matrices or tensors')
+
     def score_function(self, head_entity_id, relationship, tail_entity_id):
         """
         The score function to be used for ranking/training
@@ -77,6 +91,7 @@ class GeneralFramework(Model, TrainWrapper):
         embedded_tail = self.entity_shape_correct(embedded_tail, 'e_tail')
         relationship_matrix_head = self.relationship_shape_correct(relationship_matrix_head, 'r_head')
         relationship_matrix_tail = self.relationship_shape_correct(relationship_matrix_tail, 'r_tail')
+        print(relationship_matrix_head)
         to_return = tf.matmul(relationship_matrix_head, embedded_head)
         to_return += tf.matmul(relationship_matrix_tail, embedded_tail) 
         return tf.squeeze(to_return, axis=-1, name='g_linear')
@@ -91,6 +106,7 @@ class GeneralFramework(Model, TrainWrapper):
         """
         embedded_head = self.entity_shape_correct(embedded_head, 'e_head')
         embedded_tail = self.entity_shape_correct(embedded_tail, 'e_tail')
+        relationship_matrix = self.relationship_shape_correct(relationship_matrix, 'r_tensor')
         return bilinear_product(embedded_head, relationship_matrix, embedded_tail)
 
     def _scoring_function(self, embedded_head, relationship, embedded_tail):
@@ -108,5 +124,6 @@ class GeneralFramework(Model, TrainWrapper):
         with tf.name_scope('entity_embedding'):
             head_entity_embedded = self.embed_entity(head_entity_id)
             tail_entity_embedded = self.embed_entity(tail_entity_id)
-        return self._scoring_function(head_entity_embedded, relationship, tail_entity_embedded)
-
+        score_result = self._scoring_function(head_entity_embedded, relationship, tail_entity_embedded)
+        assert int_shapes(score_result) == [-1, 1], 'Score result was: {}, expected [-1, 1]'.format(int_shapes(score_result))
+        return score_result

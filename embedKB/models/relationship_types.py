@@ -1,16 +1,15 @@
 import tensorflow as tf
+from embedKB.utils import tensorutils
 from embedKB.models.base import Model
 
 class RelationshipVector(Model):
     def relationship_shape_correct(self, relationship_embeddings, name=None):
-        return tf.reshape(relationship_embeddings,
-                [-1, 1, self.entity_embed_dim], name=name)
+        raise DeprecationWarning('Relationship shape correct has been deprecated. Functionality is now included in base.Model')
 
 class RelationshipMatrix(Model):
     def relationship_shape_correct(self, relationship_embeddings, name=None):    
-        return tf.reshape(relationship_embeddings, 
-                [-1, self.relationship_embed_dim, self.entity_embed_dim], name=name)
+        raise DeprecationWarning('Relationship shape correct has been deprecated. Functionality is now included in base.Model')
 
-class RelationshipTensor(Model):
-    def relationship_shape_correct(self, relationship_embeddings, name=None):
-        raise NotImplementedError('Tensor methods are not yet supported')
+class RelationshipTensor(RelationshipMatrix):
+    def relationship_shape_correct(self, relationship_embeddings, name=None,):
+        raise DeprecationWarning('Relationship shape correct has been deprecated. Functionality is now included in base.Model')
