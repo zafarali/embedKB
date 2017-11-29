@@ -1,10 +1,9 @@
 from embedKB.models.base import GeneralFramework
-from embedKB.models.relationship_types import RelationshipVector
 import tensorflow as tf
 from embedKB.utils import debug
 from embedKB.utils import tensorutils
 
-class TransE(GeneralFramework, RelationshipVector):
+class TransE(GeneralFramework):
     name = 'TransE'
     def __init__(self,
                  n_entities,
@@ -42,8 +41,9 @@ class TransE(GeneralFramework, RelationshipVector):
                                                           relationship)
             relationship_matrices = tf.nn.embedding_lookup(self.W_bilinear_relationship,
                                                            relationship)
-            relationship_matrices = tf.reshape(relationship_matrices, [-1, self.relationship_embed_dim, self.relationship_embed_dim])
+
         with tf.name_scope('scoringfunction'):
+            print(tensorutils.int_shapes(relationship_vectors))
             linear_part = 2 * self.g_linear(embedded_head,
                                             relationship_vectors,
                                             -1.0 * relationship_vectors,
