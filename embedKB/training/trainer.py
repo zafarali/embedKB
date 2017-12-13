@@ -30,7 +30,7 @@ class TrainWrapper(object):
         """
         with tf.name_scope('objective'):
             self.loss_individual = loss(self.score, self.score_false, margin)
-            self.score_loss = tf.reduce_mean(self.loss_individual, name='score_loss')
+            self.score_loss = tf.reduce_sum(self.loss_individual, name='score_loss')
             self.regularized_matrices = 0
             if regularize:
                 for tensor in regularize:
@@ -102,7 +102,10 @@ class TrainWrapper(object):
                self._objective_created and \
                self._summaries_created, \
                'You must create the optimizer and the objective first.'
-        
+        assert positive_data[0].shape == negative_data[0].shape
+        assert positive_data[1].shape == negative_data[1].shape
+        assert positive_data[2].shape == negative_data[2].shape
+        assert np.all(negative_data[1] == positive_data[1])
         session = self.session()
         _, obj, score, summaries = session.run([self.train_step,
                                                 self.objective,
@@ -113,10 +116,14 @@ class TrainWrapper(object):
                                                     self.tail_entity_id: positive_data[2],
                                                     self.relationship_id: positive_data[1],
                                                     self.head_entity_id_false: negative_data[0],
-                                                    self.tail_entity_id_false: negative_data[1]
+                                                    self.tail_entity_id_false: negative_data[2],
+                                                    self.relationship_id_false: negative_data[1]
                                             })
         if summary_writer and epoch is not None:
             summary_writer.add_summary(summaries, epoch)
+        
+        # normalize embeddings after every gradient step
+        session.run(self.normalize_embeddings) # normalize the embeddings
 
         return obj, score, summaries
 
@@ -181,35 +188,35 @@ class TrainWrapper(object):
                                                         './val__summaries_'+self.name))
 
         total_batches = 0
-        for epoch in range(epochs):
-            for i, (positive_data, negative_data) in enumerate(data.get_generator()):
-                total_batches += 1
-                obj, score, summaries = self.train_batch(positive_data,
-                                                         negative_data)
+        try:
+            for epoch in range(epochs):
+                for i, (positive_data, negative_data) in enumerate(data.get_generator()):
+                    total_batches += 1
+                    obj, score, summaries = self.train_batch(positive_data,
+                                                             negative_data)
 
-                if i % batch_log_frequency == 0:
-                    print('\t Epoch {:d}, batch {:d}: score: {:.4f}, objective: {:.4f}'.format(
-                        epoch, i, score, obj))
-                    batch_summary_writer.add_summary(summaries, total_batches)
+                    if i % batch_log_frequency == 0:
+                        print('\t Epoch {:d}, batch {:d}: score: {:.4f}, objective: {:.4f}'.format(
+                            epoch, i, score, obj))
+                        batch_summary_writer.add_summary(summaries, total_batches)
 
-            # normalize embeddings after every epoch
-            session.run(self.normalize_embeddings) # normalize the embeddings
-            if self._summaries_created:
-                # train_summary_writer.add_summary(summaries, epoch)
-                self.saver.save(session, os.path.join(logging_directory, self.name+".ckpt"), epoch)
-
-
-            print('Epoch {:d}/{:d}: train_scores: {:.4f}, train_objective: {:.4f}'.format(
-                   epoch, epochs, score, obj))
+                if self._summaries_created:
+                    # train_summary_writer.add_summary(summaries, epoch)
+                    self.saver.save(session, os.path.join(logging_directory, self.name+".ckpt"), epoch)
 
 
-            self.evaluate(data, 'training', train_summary_writer, epoch)
-            if val_data:
-                val_obj, val_score, val_summaries = self.evaluate(val_data,
-                                                                  'validation',
-                                                                  val_summary_writer,
-                                                                  epoch)
+                print('Epoch {:d}/{:d}: train_scores: {:.4f}, train_objective: {:.4f}'.format(
+                       epoch, epochs, score, obj))
 
+
+                self.evaluate(data, 'training', train_summary_writer, epoch)
+                if val_data:
+                    val_obj, val_score, val_summaries = self.evaluate(val_data,
+                                                                      'validation',
+                                                                      val_summary_writer,
+                                                                      epoch)
+        except KeyboardInterrupt as e:
+            print('Training stopped early.')
 
     def top_entities(self, entity, relationship, k=5):
         """
@@ -237,7 +244,7 @@ class TrainWrapper(object):
         session = self.session()
 
         for i, (positive_data, negative_data) in enumerate(data.get_generator()):
-                # self.normalize_embeddings()
+            assert np.all(negative_data[1] == positive_data[1])
             obj, score, summaries = session.run([self.objective,
                                                  self.score_loss,
                                                  self.summaries],
@@ -246,7 +253,8 @@ class TrainWrapper(object):
                                                     self.tail_entity_id: positive_data[2],
                                                     self.relationship_id: positive_data[1],
                                                     self.head_entity_id_false: negative_data[0],
-                                                    self.tail_entity_id_false: negative_data[1]
+                                                    self.tail_entity_id_false: negative_data[2],
+                                                    self.relationship_id_false: negative_data[1]
                                                 })
             objs += obj
             scores += score

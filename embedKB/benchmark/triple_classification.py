@@ -1,14 +1,14 @@
 from .task import Task
 import numpy as np
 import logging
-from embedKB.datatools import Dataset
+from embedKB.datatools import Dataset, SmartNegativeSampling
 import multiprocessing
 import itertools
 
 MAX_ITERATES = 5000
 
 class TripleClassificationTask(Task):
-    def __init__(self, dataset, workers=1):
+    def __init__(self, dataset, workers=1, max_accuracy=1, epsilon=0.01):
         """
         This class implements the Triple Classification Task
         commonly used to benchmark knowledge base embedding models.  
@@ -26,108 +26,112 @@ class TripleClassificationTask(Task):
         
         # this stores the unique relations in our dataset
         unique_relations = np.unique(data[:, 1]).tolist()
-
-        # we now find all possible heads and tails that satisfy the relation
-        # this will be used in the classificaiton task as the triples
-        # that should be scored negatively
-        possible_heads = {}
-        possible_tails = {}
-
-        for r in unique_relations:
-            possible_heads[r] = data[np.where(data[:, 1] == r), 0][0].tolist()
-            possible_tails[r] = data[np.where(data[:, 1] == r), 2][0].tolist()
-
-        self.unique_entities = list(set(itertools.chain.from_iterable(possible_tails.values())))
-        self.possible_heads = possible_heads
-        self.possible_tails = possible_tails
         self.unique_relations = unique_relations
         self.dataset = dataset
         self.workers = workers
+        assert epsilon >= 0
+        self.epsilon = epsilon
+        assert max_accuracy <= 1
+        self.max_accuracy = max_accuracy
+
+        self.sns = SmartNegativeSampling(dataset.kb, workers)
+        self.smart_triple_corruption = self.sns.smart_triple_corruption
 
     def compute_threshold_values(self, model, dataset=None):
-        threshold_values = np.zeros(len(self.unique_relations))
-        
+        print('Computing Thresholds.')
         dataset = self.dataset.all_data if not dataset else dataset.all_data
+        nulls = 0
+        unknown_relationships = []
 
+        pos_scores = []
+        neg_scores = []
         for r in self.unique_relations:
-            # contains correct triples that satisfy the relation
-            data_subset = dataset[np.where(dataset[:, 1] == r), :][0]
-            
-            
-            per_triple_score = model.batch_score_triples(data_subset[:, 0],
-                                                         data_subset[:, 1],
-                                                         data_subset[:, 2])
+            try:
+                # contains correct triples that satisfy the relation
+                data_subset = dataset[np.where(dataset[:, 1] == r), :][0]
 
-            # set the threshold value to be the mean of the per
-            # triple score for that relation
-            threshold_values[r] = per_triple_score.mean()
+                if not len(data_subset) > 0:
+                    unknown_relationships.append(r)
+                    nulls += 1
+                    pos_scores.append(np.array([]).reshape(-1, 1))
+                    neg_scores.append(np.array([]).reshape(-1, 1))
+                    continue
+
+                negative_data_subset = self.smart_triple_corruption(data_subset)
+                
+                assert np.all(negative_data_subset[:, 1] == data_subset[:, 1])
+
+                per_triple_score = model.batch_score_triples(data_subset[:, 0],
+                                                             data_subset[:, 1],
+                                                             data_subset[:, 2])
+
+                neg_triple_score = model.batch_score_triples(negative_data_subset[:, 0],
+                                                             negative_data_subset[:, 1],
+                                                             negative_data_subset[:, 2])
+
+                
+                pos_scores.append(per_triple_score)
+                neg_scores.append(neg_triple_score)
+
+            except Exception as e:
+                print('An exception occured in relaitonship:',r)
+                print('Exception was:',str(e))
+
+        # concatenate all the scores we've got so far.
+        pos_scores_concat = np.concatenate(pos_scores)
+        neg_scores_concat = np.concatenate(neg_scores)
+
+        # get the min and max scores
+        min_score = min(pos_scores_concat.min(), neg_scores_concat.min())
+        max_score = max(pos_scores_concat.max(), neg_scores_concat.max())
+        mean_score = np.mean(pos_scores_concat) + np.mean(neg_scores_concat)
+
+        # initialize arrays
+        threshold_values = np.ones(len(self.unique_relations)) * min_score
+        per_relation_accuracy = np.ones(len(self.unique_relations)) * -1
+
+        score = min_score
+        increments = 0.01
+
+        # SAVE (TEMP)
+        from collections import defaultdict
+        acc_vs_threshold = defaultdict(lambda: {'accuracy':[], 'threshold':[]})
+
+        while score <= max_score:
+            for r in self.unique_relations:
+                pos_scores_for_relation = pos_scores[r]
+                neg_scores_for_relation = neg_scores[r]
+
+                if len(pos_scores_for_relation) == 0:
+                    threshold_values[r] = mean_score
+                    continue
+
+                mean_classification_acc = np.mean(
+                                            np.concatenate(
+                                                [pos_scores_for_relation <= score,
+                                                 neg_scores_for_relation > score]))
+                
+                if mean_classification_acc > per_relation_accuracy[r]:
+                    per_relation_accuracy[r] = mean_classification_acc
+                    threshold_values[r] = score
+                    acc_vs_threshold[r]['accuracy'].append(float(mean_classification_acc))
+                    acc_vs_threshold[r]['threshold'].append(float(score))
+            #endfor
+            score += increments
+        
+        # # SAVE (TEMP)
+        # import json
+        # with open('./debugging/accvsthresh.json', 'w') as f:
+        #     json.dump(acc_vs_threshold, f)
+        
+        if nulls > 0:
+            logging.warn('There were {} relations with no thresholds. They were set to 0.'.format(nulls))
+            print(unknown_relationships)
 
         self.threshold_values = threshold_values
 
-    def pick_new_entity(self, current_entity, choose_from, max_iterates=MAX_ITERATES):
-        """
-        Picks a new entity from a list of entities in choose_from.
-        :param current_entity: the current value of the entity
-        :param choose_from: the list of entities we can choose from
-        :result: the int representing the new entity to replace with.
-        """
-        new_entity = current_entity
-        iterates = 0
-        while new_entity == current_entity:
-            new_entity = np.random.choice(choose_from)
-            iterates += 1
-            if iterates > max_iterates:
-                logging.warn('Too many iterates picked the same entity. Picking random entity.')
-                new_entity = np.random.choice(self.unique_entities)
-        return new_entity
-
-    def _corrupt(self, triple):
-        # decice which entity to replace:
-        entity_to_replace = np.random.choice([0, 2])
-        to_return = None
-        if entity_to_replace == 0:
-            new_entity = self.pick_new_entity(triple[0], self.possible_heads[triple[1]])
-            to_return = (new_entity, triple[1], triple[2])
-        elif entity_to_replace == 2:
-            new_entity = self.pick_new_entity(triple[0], self.possible_tails[triple[1]])
-            to_return = (triple[0], triple[1], new_entity)
-        else:
-            raise ValueError('Unknown entity to replace.')
-        return to_return
-
-    def smart_triple_corruption(self, data_, *args):
-        """
-        As described in the paper, this corruption mechanism only creates
-        _plausibly_ corrupt triples. As quoted from the original paper:
-
-        "For example, given a correct triplet (Pablo Picaso, nationality, Spain),
-        a potential negative example is (Pablo Picaso, nationality,United States). 
-        This forces the model to focus on harder cases and makes the evaluation harder since it does not include obvious non-relations such 
-        as (Pablo Picaso, nationality, Van Gogh)"
-
-        Since this is more computationally intensive than regular negative sampling
-        we make use of the multiprocessing module to ensure we can do it in parallel
-        make sure to pass in workers > 1 in the constructor if you have more than one
-        core available for this.
-
-        :param data_: the data to do the corruption on.
-        :param *args: for compatability reasons.
-        """
-        data = data_.copy()
-        entity_to_replace = np.random.choice([0, 2], replace=True, size=data.shape[0])
-        # entity_to_replace_with = np.random.randint(n_possibilities, size=data.shape[0])
-        data = data.tolist()
-
-        # use multiprocessing so that we can perform the triple corruption
-        # in parallel
-        with multiprocessing.Pool(self.workers) as pool:
-            join = np.array(pool.map(self._corrupt, data))
-        return join
 
     def benchmark(self, dataset, model, batch_log_frequency=10):
-        dset = Dataset(dataset.kb,
-                       dataset.batch_size,
-                       self.smart_triple_corruption)
 
         total_correct = 0
         total_instances = 0
@@ -146,12 +150,12 @@ class TripleClassificationTask(Task):
             neg_scores = model.batch_score_triples(*negative_batch)
 
             # get the classification for each triple
-            pos_classification = pos_scores < thresholds
-            neg_classification = neg_scores < thresholds
-
+            pos_classification = pos_scores < thresholds #positive classified as plausible
+            neg_classification = neg_scores < thresholds #negative classified as plausible
+            
             # check with the true values:
-            pos_correct = pos_classification == np.ones_like(thresholds)
-            neg_correct = neg_classification == np.zeros_like(thresholds)
+            pos_correct = pos_classification == np.ones_like(thresholds) # should be plausible
+            neg_correct = neg_classification == np.zeros_like(thresholds) # should actually be implausible
             
             # collect statistics:
             total_correct += np.sum(pos_correct) + np.sum(neg_correct)
@@ -168,6 +172,6 @@ class TripleClassificationTask(Task):
         print('TripleClassificationTask Benchmarking Results')
         print('Total instances: ', total_instances)
         print('% instances correctly classified:', total_correct/(2*total_instances))
-        print('% positive instances correctly: ', total_pos_correct / total_instances)
-        print('% negative instances correctly: ', total_neg_correct / total_instances)
+        print('% positive instances classified as positive: ', total_pos_correct / total_instances)
+        print('% negative instances classified as negative: ', total_neg_correct / total_instances)
         return total_correct, total_pos_correct, total_neg_correct, total_instances

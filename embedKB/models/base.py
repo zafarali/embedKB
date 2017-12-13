@@ -68,13 +68,14 @@ class GeneralFramework(Model, TrainWrapper):
         self.head_entity_id = create_placeholder('entity_id_head')
         self.tail_entity_id = create_placeholder('entity_id_tail')
         self.relationship_id = create_placeholder('realtionship_id')
+        self.relationship_id_false = create_placeholder('relationship_id_false')
         self.head_entity_id_false = create_placeholder('entity_id_head_false')
         self.tail_entity_id_false = create_placeholder('entity_id_tail_false')
 
         with tf.name_scope('positive_triple'):
             self.score = self.score_function(self.head_entity_id, self.relationship_id, self.tail_entity_id)
         with tf.name_scope('negative_triple'):
-            self.score_false = self.score_function(self.head_entity_id_false, self.relationship_id, self.tail_entity_id_false)
+            self.score_false = self.score_function(self.head_entity_id_false, self.relationship_id_false, self.tail_entity_id_false)
 
     def g_linear(self, embedded_head, relationship_matrix_head, relationship_matrix_tail, embedded_tail):
         """

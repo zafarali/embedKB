@@ -38,7 +38,7 @@ class KnowledgeBase(object):
     def n_relations(self):
         return len(self.relations) if self.relations else 0
 
-    def convert_triples(self, verbose_errors=False):
+    def convert_triples(self, verbose_errors=False, ignore_relationships=[]):
         """
         Converts the triples to a numpy format suitable for consumption
         Note after this is done, you cannot load more triples.
@@ -47,6 +47,9 @@ class KnowledgeBase(object):
         converted_triples = []
         errors = []
         for triple in self.triples:
+            # skip some relationships:
+            if triple.relationship in ignore_relationships:
+                continue
             try:
                 converted_triples.append(TripleConverted(self.entities[triple.head_entity],
                                                          self.relations[triple.relationship],

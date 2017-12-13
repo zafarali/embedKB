@@ -63,8 +63,8 @@ class NeuralTensorNetwork(GeneralFramework):
             a = tf.reshape(
                     tf.reduce_sum(
                         tf.multiply(
-                            tf.reshape(u_r, [-1, self.relationship_embed_dim])),
-                            tf.tanh(linear_part + bilinear_part)
+                            tf.reshape(u_r, [-1, self.relationship_embed_dim]),
+                            tf.tanh(linear_part + bilinear_part)),
                         axis=[1]), 
                     [-1, 1], name='result')
 
