@@ -3,13 +3,15 @@ import numpy as np
 import random
 import multiprocessing
 
+random.seed(1)
+np.random.seed(1)
+
 def reprepare_data(data):
     heads, relationships, tails = data
     heads = heads.reshape(-1).tolist() 
     relationships = relationships.reshape(-1).tolist() 
     tails = tails.reshape(-1).tolist() 
     return zip(heads, relationships, tails)
-
 
 class EntityPredictionTask(Task):
     """
@@ -54,7 +56,7 @@ class EntityPredictionTask(Task):
         triples.add(correct_triple)
         return np.array(list(triples))
 
-    def benchmark(self, dataset, model, entity_subsample=256, batch_subsample=32, batch_log_frequency=10):
+    def benchmark(self, dataset, model, entity_subsample=256, batch_subsample=16, batch_log_frequency=10):
         """
         :param entity_subsample: subsample of the entities to pick and evaluate on
         :param batch_subsample: the subsample of the batch to pick and evaluate on
@@ -92,7 +94,7 @@ class EntityPredictionTask(Task):
         #     total_correct += sum(result)
         #     total_instances += 2*len(result)
 
-        print('Entity Prediction Task ({}) results:'.format(self.mode))
+        print('Entity Prediction Task ({}) results:'.format(self.MODE))
         print('number of instances:', total_instances)
         print('k=',self.top_k)
         print('number of instances where head/tail was in top_k:', total_correct)

@@ -99,3 +99,9 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+# IntelliJ
+.idea/
+
+# project folders
+data/Release/

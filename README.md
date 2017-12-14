@@ -1,4 +1,4 @@
-# embedKB
+# EmbedKB
 
 The goal of this repository is to implement embedding models for knowledge bases according to the general framework in [1]
 
@@ -11,6 +11,20 @@ Some key features:
 - Benchmarking tasks
 - Knowledge base data manipulation functions.
 - Unit testing
+
+To install see [Installation](#installation). To get a brief overview of the features see [the introduction section](#easy-to-use) To use the command line interface to train and benchmark models see [training](#Training) and [Benchmarking](#benchmarking).
+
+## Installation
+
+from this directory run
+
+```
+pip3 install -e . --user
+```
+
+this way you install a development version of the module.
+This code has been tested with Tensorflow 1.2.0
+
 
 ## Easy to use!
 
@@ -108,17 +122,65 @@ print(next(train_dset.get_generator()))
 
 You will see that it contains a tuple each with a tuple of three numpy arrays representing head_entity_ids, relationship_ids and tail_entity_ids.
 
+## Tasks
 
-## Installation
+There are currently two tasks implemented for benchmarking:
 
-from this directory run
+1. Triple Classification
+2. Entity Prediction
+
+It's as easy as a few lines:
 
 ```
-pip3 install -e . --user
+# using the filtered version of the task:
+task = EntityPredictionTask(kb, workers=5, filtered=True)
+task.benchmark(val_dset, framework)
 ```
 
-this way you install a development version of the module.
-This code has been tested with Tensorflow 1.2.0
+# Training
+
+Model under from [1] are implemented for you. You can use `./scripts/training.py` to run them. 
+
+```
+usage: training.py [-h] -m MODEL_NAME [-e ENTITY_DIM] [-r RELATION_DIM]
+                   [-data DATA] [-reg REG_WEIGHT] [-lr INIT_LEARNING_RATE]
+                   [-gpu GPU] [-n_epochs N_EPOCHS]
+                   [-batch_log_freq BATCH_LOG_FREQ] [-batch_size BATCH_SIZE]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -m MODEL_NAME, --model_name MODEL_NAME
+                        model to run
+  -e ENTITY_DIM, --entity_dim ENTITY_DIM
+                        model to run
+  -r RELATION_DIM, --relation_dim RELATION_DIM
+                        model to run
+  -data DATA, --data DATA
+                        location of the data
+  -reg REG_WEIGHT, --reg_weight REG_WEIGHT
+                        regularization weight
+  -lr INIT_LEARNING_RATE, --init_learning_rate INIT_LEARNING_RATE
+                        initial learning rate
+  -gpu GPU              ID of GPU to execute on
+  -n_epochs N_EPOCHS, --n_epochs N_EPOCHS
+                        number of epochs
+  -batch_log_freq BATCH_LOG_FREQ, --batch_log_freq BATCH_LOG_FREQ
+                        logging frequency
+  -batch_size BATCH_SIZE, --batch_size BATCH_SIZE
+```
+
+For example:
+
+```
+cd scripts
+python3 training.py -m TransE -e 50 -r 50 -data '../data/Release' -n_epochs 100
+```
+
+Will run TransE. The data and models are check pointed and saved into `./TransE`.
+
+# Benchmarking
+
+- [ ] Todo 
 
 
 ## Testing

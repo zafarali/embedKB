@@ -2,22 +2,34 @@ import numpy as np
 import itertools
 import multiprocessing
 
-def negative_sampling(data, n_possibilities):
-    """
-    Implements vanilla negative sampling. 
-    Either the head entity or the tail entity is replaced with an entity
-    from the total number of possible entities.
-    """
-    # select whether we should replace the head or the tails
-    data = data.copy()
-    entity_to_replace = np.random.choice([0, 2], replace=True, size=data.shape[0])
-    entity_to_replace_with = np.random.randint(n_possibilities, size=data.shape[0])
-    data[np.arange(0, data.shape[0]), entity_to_replace] = entity_to_replace_with
-    return data
-
-
 MAX_ITERATES = 5000
-class SmartNegativeSampling(object):
+
+class Sampling(object):
+    def __init__(self, seed=1):
+        self.reset(seed)
+
+    def reset(self, seed=1):
+        self.rng = np.random.RandomState(seed)
+        self.seed = seed
+
+class NegativeSampling(Sampling):
+    def __init__(self, seed=1):
+        super().__init__(seed=seed)
+
+    def sample(self, data, n_possibilities):
+        """
+        Implements vanilla negative sampling. 
+        Either the head entity or the tail entity is replaced with an entity
+        from the total number of possible entities.
+        """
+        # select whether we should replace the head or the tails
+        data = data.copy()
+        entity_to_replace = self.rng.choice([0, 2], replace=True, size=data.shape[0])
+        entity_to_replace_with = self.rng.randint(n_possibilities, size=data.shape[0])
+        data[np.arange(0, data.shape[0]), entity_to_replace] = entity_to_replace_with
+        return data
+
+class SmartNegativeSampling(Sampling):
     """
     Implements smart negative sampling where the head or tail entity is replaced
     with an entity that is allowed at that position based on the relationship.
@@ -28,7 +40,8 @@ class SmartNegativeSampling(object):
         dset = Dataset(kb, sampler=sns.smart_triple_corruption)
     ```
     """
-    def __init__(self, kb, workers=4):
+    def __init__(self, kb, workers=4, seed=1):
+        super().__init__(seed=seed)
         self.workers = workers
         self.kb = kb
         assert kb._converted_triples
@@ -62,17 +75,17 @@ class SmartNegativeSampling(object):
         new_entity = current_entity
         iterates = 0
         while new_entity == current_entity:
-            new_entity = np.random.choice(choose_from)
+            new_entity = self.rng.choice(choose_from)
             iterates += 1
             if len(choose_from) == 1 or iterates > max_iterates:
                 # we picked the same entity too many times
                 # of there was only one entity to choose from anyway.
-                new_entity = np.random.choice(self.unique_entities)
+                new_entity = self.rng.choice(self.unique_entities)
         return new_entity
 
     def _corrupt(self, triple):
         # decice which entity to replace:
-        entity_to_replace = np.random.choice([0, 2])
+        entity_to_replace = self.rng.choice([0, 2])
         to_return = None
         if entity_to_replace == 0:
             new_entity = self.pick_new_entity(triple[0], self.possible_heads[triple[1]])
@@ -84,7 +97,7 @@ class SmartNegativeSampling(object):
             raise ValueError('Unknown entity to replace.')
         return to_return
 
-    def smart_triple_corruption(self, data_, *args):
+    def sample(self, data_, *args):
         """
         As described in the paper, this corruption mechanism only creates
         _plausibly_ corrupt triples. As quoted from the original paper:
@@ -116,14 +129,14 @@ class Dataset(object):
     def __init__(self,
                  knowledge_base,
                  batch_size=32,
-                 sampler=negative_sampling,
+                 sampler=NegativeSampling(),
                  inflation_factor=1):
         """
         Creates a wrapper around the knowledge base for training.
         This will create positive and negative batches for training
         :param knowledge_base: the knowledge base to learn from
         :param batch_size: the number of triples in each batch
-        :param sampler: the sampler to use (by default random negative_sampling is used)
+        :param sampler: the sampler to use (by default random NegativeSampling is used)
         :param inflation_factor: the number of corrupted triples per triple in the knowledge base. 
         """
         self.all_data = np.array(knowledge_base.triples, dtype=np.int32)
@@ -134,7 +147,7 @@ class Dataset(object):
         self.inflation_factor = inflation_factor
 
     def get_generator(self):
-        shuffled_idx = np.random.permutation(self.kb.n_triples)
+        shuffled_idx = self.sampler.rng.permutation(self.kb.n_triples)
 
         for i in range(0, self.kb.n_triples, self.batch_size):
             idx = shuffled_idx[i: i+self.batch_size]
@@ -151,7 +164,7 @@ class Dataset(object):
                              minibatch[:, 2].reshape(-1,1))
 
             for j in range(self.inflation_factor):
-                negative_minibatch = self.sampler(minibatch, self.kb.n_entities)
+                negative_minibatch = self.sampler.sample(minibatch, self.kb.n_entities)
                 negative_data = (negative_minibatch[:, 0].reshape(-1,1),
                                  negative_minibatch[:, 1].reshape(-1,1),
                                  negative_minibatch[:, 2].reshape(-1,1))

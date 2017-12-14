@@ -68,17 +68,18 @@ def test_entity_prediction_score_triple():
     ept = EntityPredictionTask(kb, top_k=1)
     ept.model = model
     score = ept.score_triple((kb.entities['GTA'], kb.relations['played_by'], kb.entities['adults']),  entity_subsample=kb.n_entities)
-    assert score == 2
+    assert score[0] == 2
 
     model = FakeModel()
     ept = EntityPredictionTask(kb, top_k=1)
     ept.model = model
     score = ept.score_triple((kb.entities['GTA'], kb.relations['played_by'], kb.entities['adults']),  entity_subsample=kb.n_entities)
-    assert score == 0
+    # @TODO: this test fails sometimes because of something stochastic going on. Need to investigate.
+    assert score[0] == 0
 
 
     model = FakeModel()
     ept = EntityPredictionTask(kb, top_k=10)
     ept.model = model
     score = ept.score_triple((kb.entities['GTA'], kb.relations['played_by'], kb.entities['adults']), entity_subsample=kb.n_entities)
-    assert score == 2
+    assert score[0] == 2

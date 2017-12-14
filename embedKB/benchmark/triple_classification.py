@@ -1,14 +1,19 @@
 from .task import Task
 import numpy as np
 import logging
-from embedKB.datatools import Dataset, SmartNegativeSampling
+from embedKB.datatools import Dataset, SmartNegativeSampling, NegativeSampling
 import multiprocessing
 import itertools
 
 MAX_ITERATES = 5000
 
 class TripleClassificationTask(Task):
-    def __init__(self, dataset, workers=1, max_accuracy=1, epsilon=0.01):
+    def __init__(self,
+                 dataset,
+                 workers=1,
+                 sampler='smart',
+                 max_accuracy=1,
+                 epsilon=0.01):
         """
         This class implements the Triple Classification Task
         commonly used to benchmark knowledge base embedding models.  
@@ -34,8 +39,12 @@ class TripleClassificationTask(Task):
         assert max_accuracy <= 1
         self.max_accuracy = max_accuracy
 
-        self.sns = SmartNegativeSampling(dataset.kb, workers)
-        self.smart_triple_corruption = self.sns.smart_triple_corruption
+        if sampler == 'smart':
+            self.sns = SmartNegativeSampling(dataset.kb, workers)
+        else:
+            self.sns = NegativeSampling()
+
+        self.sample = self.sns.sample
 
     def compute_threshold_values(self, model, dataset=None):
         print('Computing Thresholds.')
@@ -57,7 +66,7 @@ class TripleClassificationTask(Task):
                     neg_scores.append(np.array([]).reshape(-1, 1))
                     continue
 
-                negative_data_subset = self.smart_triple_corruption(data_subset)
+                negative_data_subset = self.sample(data_subset)
                 
                 assert np.all(negative_data_subset[:, 1] == data_subset[:, 1])
 
@@ -139,7 +148,7 @@ class TripleClassificationTask(Task):
         total_neg_correct = 0
         per_relation_accuracy = np.zeros_like(self.threshold_values)
 
-        for i, (positive_batch, negative_batch) in enumerate(dset.get_generator()):
+        for i, (positive_batch, negative_batch) in enumerate(dataset.get_generator()):
             
             # first prepare the thresholds
             relationships = positive_batch[1]
