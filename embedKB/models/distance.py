@@ -2,7 +2,7 @@ from embedKB.models.base import GeneralFramework
 import tensorflow as tf
 
 class DistanceEmbedding(GeneralFramework):
-
+    name = 'DistanceEmbedding'
     def __init__(self,
                  n_entities,
                  entity_embed_dim,

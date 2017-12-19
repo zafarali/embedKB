@@ -1,12 +1,11 @@
 # EmbedKB
 
-The goal of this repository is to implement embedding models for knowledge bases according to the general framework in [1]
-
-[1] [Yang, Bishan, et al. "Learning multi-relational semantics using neural-embedding models." arXiv preprint arXiv:1411.4072 (2014).](https://arxiv.org/pdf/1412.6575.pdf)
+The goal of this repository is to allow rapid immplementation of knowledge base embedding models and evaluation on tasks. 
 
 Some key features:
 
 - Implementations of common knowledge base embedding models
+- Implementation of the General Framework as described in [1]
 - Full integration with Tensorboard including Embeddings visualizer
 - Benchmarking tasks
 - Knowledge base data manipulation functions.
@@ -61,9 +60,9 @@ To ask for the "score" for any given triple you can do `framework.score_triple(1
 
 Make sure that the triples are in a tab separated file of the form:
 ```
-head_entity\trelationship\ttail_entity
-head_entity\trelationship\ttail_entity
-head_entity\trelationship\ttail_entity
+head_entity  relationship  tail_entity
+head_entity  relationship  tail_entity
+head_entity  relationship  tail_entity
 ```
 
 You can then use `embedKB.datatools.KnowledgeBase` to manipulate and save the knowledge base into an appropriate format for downstream training:
@@ -180,8 +179,31 @@ Will run TransE. The data and models are check pointed and saved into `./TransE`
 
 # Benchmarking
 
-- [ ] Todo 
+You can find the script for bencmarking in `./scripts` as well.
 
+```
+python3 scripts/benchmark.py -h
+usage: benchmark.py [-h] -m MODEL_NAME [-e ENTITY_DIM] [-r RELATION_DIM] -f
+                    FOLDER [-gpu GPU] -t TASK
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -m MODEL_NAME, --model_name MODEL_NAME
+                        model to run
+  -e ENTITY_DIM, --entity_dim ENTITY_DIM
+                        model to run
+  -r RELATION_DIM, --relation_dim RELATION_DIM
+                        model to run
+  -f FOLDER, --folder FOLDER
+                        location of the model and kb
+  -gpu GPU              ID of GPU to execute on
+  -t TASK, --task TASK  the task to benchmark upon
+```
+
+Two tasks are already implemented:
+
+- `ept`: Entity Prediction as described in [2]
+- `tct`: Triple Classification as described in [3]
 
 ## Testing
 
@@ -192,4 +214,10 @@ There are a few unit tests. To run:
 python3 -m pytest
 ```
 
-# How to use
+# Reference
+
+[1] [Yang, Bishan, et al. "Learning multi-relational semantics using neural-embedding models." arXiv preprint arXiv:1411.4072 (2014).](https://arxiv.org/pdf/1412.6575.pdf)
+
+[2] [Bordes, Antoine, et al. "Translating embeddings for modeling multi-relational data." Advances in neural information processing systems. 2013.](https://papers.nips.cc/paper/5071-translating-embeddings-for-modeling-multi-relational-data.pdf)
+
+[3] [Socher, Richard, et al. "Reasoning with neural tensor networks for knowledge base completion." Advances in neural information processing systems. 2013.](https://nlp.stanford.edu/pubs/SocherChenManningNg_NIPS2013.pdf)

@@ -1,6 +1,7 @@
 import os
 import sys
-sys.path.insert(0, "/mnt/hdd/Dropbox (NRP)/travaille/classes/comp550/finalproject/embedKB")
+# uncomment for running on local:
+# sys.path.insert(0, os.path.abspath(".."))
 import argparse
 from embedKB.models import get_model
 from embedKB.datatools import load_saved_data
@@ -12,7 +13,7 @@ parser.add_argument('-e', '--entity_dim', help="model to run", default=50)
 parser.add_argument('-r', '--relation_dim', help="model to run", default=50)
 parser.add_argument('-f', '--folder', help="location of the model and kb", required=True)
 parser.add_argument('-gpu', help="ID of GPU to execute on", default='0')
-parser.add_argument('-t', '--task', help="the task to benchmark upon", required=True)
+parser.add_argument('-t', '--task', help="the task to benchmark upon (ept or tct)", required=True)
 
 args = parser.parse_args()
 print('Running benchmark code for: {0} on GPU {1}...'.format(args.model_name, args.gpu))
@@ -57,3 +58,5 @@ elif args.task == 'ept':
 
     print('Benchmarking on test set...')
     ept.benchmark(dset_test, model, batch_log_frequency=100000)
+else:
+    raise KeyError('Unknown benchmarking, we currently support "ept" and "tct"')

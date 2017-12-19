@@ -1,7 +1,7 @@
 import os
 import sys
-sys.path.insert(0, "/mnt/hdd/Dropbox (NRP)/travaille/classes/comp550/finalproject/embedKB")
-
+# uncomment for running on local:
+# sys.path.insert(0, os.path.abspath(".."))
 import argparse
 from embedKB.datatools import get_data
 from embedKB.models import get_model
